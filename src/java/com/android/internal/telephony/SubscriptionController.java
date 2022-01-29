@@ -875,6 +875,19 @@ public class SubscriptionController extends ISub.Stub {
     @Override
     public List<SubscriptionInfo> getAllSubInfoList(String callingPackage,
             String callingFeatureId) {
+        return getAllSubInfoList(callingPackage, callingFeatureId, false);
+    }
+
+    /**
+     * @param callingPackage The package making the IPC.
+     * @param callingFeatureId The feature in the package
+     * @param skipConditionallyRemoveIdentifier if set, skip removing identifier conditionally
+     * @return List of all SubscriptionInfo records in database,
+     * include those that were inserted before, maybe empty but not null.
+     * @hide
+     */
+    public List<SubscriptionInfo> getAllSubInfoList(String callingPackage,
+            String callingFeatureId, boolean skipConditionallyRemoveIdentifier) {
         if (VDBG) logd("[getAllSubInfoList]+");
 
         // This API isn't public, so no need to provide a valid subscription ID - we're not worried
@@ -893,9 +906,9 @@ public class SubscriptionController extends ISub.Stub {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-        if (subList != null) {
+        if (subList != null && !skipConditionallyRemoveIdentifier) {
             if (VDBG) logd("[getAllSubInfoList]- " + subList.size() + " infos return");
-            subList.stream().map(
+            subList = subList.stream().map(
                     subscriptionInfo -> conditionallyRemoveIdentifiers(subscriptionInfo,
                             callingPackage, callingFeatureId, "getAllSubInfoList"))
                     .collect(Collectors.toList());
@@ -903,13 +916,14 @@ public class SubscriptionController extends ISub.Stub {
             if (VDBG) logd("[getAllSubInfoList]- no info return");
         }
         return subList;
+
     }
 
     private List<SubscriptionInfo> makeCacheListCopyWithLock(List<SubscriptionInfo> cacheSubList) {
         synchronized (mSubInfoListLock) {
             return new ArrayList<>(cacheSubList);
         }
-    }
+  }
 
     @Deprecated
     @UnsupportedAppUsage
@@ -3687,8 +3701,10 @@ public class SubscriptionController extends ISub.Stub {
         List<SubscriptionInfo> subInfoList;
 
         try {
+            // need to bypass removing identifier check because that will remove the subList without
+            // group id.
             subInfoList = getAllSubInfoList(mContext.getOpPackageName(),
-                    mContext.getAttributionTag());
+                    mContext.getAttributionTag(), true);
             if (groupUuid == null || subInfoList == null || subInfoList.isEmpty()) {
                 return new ArrayList<>();
             }
